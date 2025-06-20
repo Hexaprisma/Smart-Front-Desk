@@ -58,11 +58,11 @@ database_schema_string = "\n".join(
 def registerSchedule(time,date,specialistID):
     cursor = conn.cursor()
     cursor.execute('''
-    SELECT {date}
+    SELECT "{date}"
     FROM Shop_Schedule
     WHERE time_slot = ?
-    AND ({date} IS NULL OR {date} = '');
-    INSERT INTO Shop_Schedule (Time_Slots, {date})
+    AND ("{date}" IS NULL OR "{date}" = '');
+    INSERT INTO Shop_Schedule (Time_Slots, "{date}")
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''', (name, phone, 'confirm', date, time, service, specialistID, notes))
 
@@ -95,10 +95,10 @@ def checkAvaliability(specialist, date, timeSlot):
 
     # Query to check if the given 'Date' column has an empty or NULL slot for the given 'time'
     query = f'''
-    SELECT {date}
+    SELECT "{date}"
     FROM Shop_Schedule
-    WHERE time_slot = ?
-    AND ({date} IS NULL OR {date} = '');
+    WHERE Time_Slots = ?
+    AND ("{date}" IS NULL OR "{date}" = '');
     '''
     cursor.execute(query,(timeSlot,))
     # Fetch the result
@@ -114,7 +114,7 @@ def checkAvaliability(specialist, date, timeSlot):
 #func that will return the next solution
 def make_reservation(user_name = None, phoneNumber = None, date = None, time = None, service = None, specialist = "Any"):
     """Function to make reservation for user by accessing SQLite database."""
-    print(user_name, phoneNumber, date, time, service, specialist)
+    print("user name: " + user_name, "phone number: " + phoneNumber, "date: " + date, "time: " + time, "service: " + service, "specialist: " + specialist)
     if((user_name == None) or (phoneNumber == None) or (date == None) or (service == None)):
         return ("Ask the user to provide all missing information.")
     elif(checkAvaliability(specialist, date, time) == True):
@@ -202,6 +202,7 @@ GPT_MODEL = "gpt-3.5-turbo"
 messages = [
     {"role":"system",
     "content": "Your name is Lynx and you are a shop assistant, skilled in customer services. You should get the customer's first and last name, phone number, and services they want."},
+    {"role": "system", "content": "Your response should be as comscise as possible, don't use complex language."},
     {"role": "system", "content": "Don't make assumptions about what customers want. Ask for clarification if a user request is ambiguous."},
     {"role": "system", "content": "Don't make assumptions about what values to plug into functions. Ask for clarification if a user request is ambiguous."},
     {"role": "system","content":"only use database information to answer questions. Do not speak anything unrelated to database information."},
