@@ -1,16 +1,30 @@
 from calendar_manager import CalendarManager
+from config import SERVICES, SPECIALISTS
 
 if __name__ =="__main__":
     calendar = CalendarManager()
 
-    calendar.add_event("Dentist", "2025-06-20", "14:00", "Annual cleaning")
-    calendar.add_event("Team Meeting", "2025-06,21", "10:30", "Project update")
+    name = "Dolly"
+    phone = "1234567890"
+    date = "2025-06-23"
+    time = "10:30"
+    service = "Nail Polish"
+    specialist = "Sophia"
+    calendar.add_appointment(name, phone, date, time, service, specialist)
+    
+    name = "Lily"
+    phone = "1234567890"
+    date = "2025-06-24"
+    time = "11:30"
+    service = "Nail Polish"
+    specialist = "Sophia"
+    calendar.add_appointment(name, phone, date, time, service, specialist)
 
     # view events
-    calendar.list_events()
+    calendar.list_appointments()
 
     # Cancel an event
-    #calendar.cancel_event(1)
+    #calendar.cancel_Appointment(1)
 
     #View events
     #calendar.list_events()

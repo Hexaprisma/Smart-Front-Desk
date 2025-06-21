@@ -1,0 +1,19 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background: #f7f7f7;
+}
+table {
+    margin: 20px auto;
+    border-collapse: collapse;
+}
+th, td {
+    padding: 10px;
+    border: 1px solid #ccc;
+}
+.booked {
+    background-color: #f8d7da;
+}
+.available {
+    background-color: #d4edda;
+}

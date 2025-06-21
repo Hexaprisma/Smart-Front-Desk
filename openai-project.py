@@ -153,7 +153,30 @@ aiTools = [
             },
         }
     },
-    
+
+    {
+        "type": "function",
+        "function": {
+            "name": "check_availability",
+            "description": "Use this function to check if shop calendar is available.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": f"""
+                                SQL query extracting info to answer the user's question.
+                                SQL should be written using this database schema:
+                                {database_schema_string}
+                                The query should be returned in plain text, not in JSON.
+                                """,
+                    }
+                },
+                "required": ["query"],
+            },
+        }
+    },
+
     {
         "type": "function",
         "function": {

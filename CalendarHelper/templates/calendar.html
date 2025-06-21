@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Herbal Nail Bar Calendar</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <h1>Herbal Nail Bar Calendar</h1>
+    <form method="post">
+        <label for="date">Date (YYYY-MM-DD):</label>
+        <input type="text" name="date" value="{{ date }}">
+        <button type="submit">View</button>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                {% for specialist in specialists %}
+                <th>{{ specialist }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in schedule %}
+            <tr>
+                <td>{{ row.time }}</td>
+                {% for cell in row.specialists %}
+                <td class="{{ cell.status }}">{{ cell.text }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
