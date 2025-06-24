@@ -4,6 +4,7 @@ import json
 from tenacity import retry, wait_random_exponential, stop_after_attempt
 from SqlManager import SqlManager
 from CalendarHelper import calendar_manager
+from datetime import date
 
 sqlManager = SqlManager
 
@@ -70,7 +71,8 @@ def registerCustomer(name, phone, date, time, service, specialistID, notes = 'No
 #We dont check specialist at this point, since we only have one specialist table
 def check_calendar(date, time, specialist=None):
     output = calendar.check_appointment_availability(date, time, specialist)
-    return output
+    #print(output)
+    return str(output)
     
 
 #func that will return the next solution
@@ -207,10 +209,12 @@ aiTools = [
 client = OpenAI()
 GPT_MODEL = "gpt-3.5-turbo"
 
+today = date.today()
 messages = [
     {"role":"system",
     "content": "Your name is Lynx and you are a shop assistant, skilled in customer services. You should get the customer's first and last name, phone number, and services they want."},
     {"role": "system", "content": "Your response should be as comscise as possible, don't use complex language."},
+    {"role": "system", "content": "today's date is: {today}"},
     {"role": "system", "content": "Don't make assumptions about what customers want. Ask for clarification if a user request is ambiguous."},
     {"role": "system", "content": "Don't make assumptions about what values to plug into functions. Ask for clarification if a user request is ambiguous."},
     {"role": "system","content":"only use database information to answer questions. Do not speak anything unrelated to database information."},
@@ -296,8 +300,16 @@ def ResponseManager(response_message):
         elif tool_function_name == 'check_calendar':
             date = json.loads(tool_calls[0].function.arguments)['date']
             time = json.loads(tool_calls[0].function.arguments)['time']
-            specialist = json.loads(tool_calls[0].function.arguments)['specialist']            
+            specialist = json.loads(tool_calls[0].function.arguments).get('specialist', "Any")
+            #print(f"{date} {time} {specialist}")            
             results = check_calendar(date, time, specialist)
+            messages.append({
+                "role":"tool",
+                "tool_call_id":tool_call_id,
+                "name": tool_function_name,
+                "content": results
+            })
+            printMessage()
         else:
             print(f"Error: function {tool_function_name} does not exist")
     else:
@@ -315,6 +327,7 @@ while True:
         messages.append({"role":"user","content": user_input})
         response = chat_completion_request(tools = aiTools, model=GPT_MODEL)
         #print conversation result
+        #create an exception phase in here, withdraw the bad input
         response_message = response.choices[0].message
         #print(response_message)
         messages.append(response_message)

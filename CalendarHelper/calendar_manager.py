@@ -126,12 +126,16 @@ class CalendarManager:
         return 0
 
     def check_appointment_availability(self, date, time, preferred_specialist=None, service=None):
-        duration = SERVICES[service]["duration"]
+        if(preferred_specialist == "Any"):
+            preferred_specialist = None
+
         if service == None:
-            duration = "60"
+            duration = 60
         elif not self.is_valid_service(service):
             print("Invalid service.")
             return 1
+        else:
+            duration = SERVICES[service]["duration"]
 
         
         valid, msg = self.check_business_hours(date, time, duration)
@@ -144,7 +148,8 @@ class CalendarManager:
             print("No specialist available at that time.")
             return 3
         
-        return f"service {service} at {time} {date} with {assigned} is available"
+        #print(f"Manager log: service {service} at {time} {date} with {assigned} is available")
+        return f"service at {time} {date} with specialist {assigned} is available, ask the user for services they want to reserve."
 
     def list_appointments(self):
         rows = self.conn.execute("SELECT * FROM Appointments ORDER BY date, time").fetchall()
