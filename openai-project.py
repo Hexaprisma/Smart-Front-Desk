@@ -3,42 +3,20 @@ import sqlite3
 import json
 from tenacity import retry, wait_random_exponential, stop_after_attempt
 from SqlManager import SqlManager
+from CalendarHelper import calendar_manager
 
 sqlManager = SqlManager
 
-conn = sqlite3.connect("data/shopData/TestingData.db")
+#now replaced with the calendar manager method
+#conn = sqlite3.connect("data/shopData/TestingData.db")
+calendar = calendar_manager.CalendarManager()
+conn = calendar.conn
 print("Opened database successfully")
 
 
-def get_table_names(conn):
-    """Return a list of table names."""
-    table_names = []
-    #conn.execute is used to execute an SQL statement. It returns a cursor object 
-    #that allows you to interate over the results of a query. 
-    tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table';")
-    for table in tables.fetchall():
-        table_names.append(table[0])
-        print(table[0])
-    return table_names
+#SQLite methods
 
-def get_column_names(conn, table_name):
-    """Return a list of column names."""
-    column_names = []
-    columns = conn.execute(f"PRAGMA table_info('{table_name}');").fetchall()
-    for col in columns:
-        column_names.append(col[1])
-    return column_names
-
-
-def get_database_info(conn):
-    """Return a list of dicts containing the table name and column for each table in the database."""
-    table_dicts = []
-    for table_name in get_table_names(conn):
-        column_names = get_column_names(conn, table_name)
-        table_dicts.append({"table_name": table_name, "column_names": column_names})
-    return table_dicts
-
-
+#this is the actual program I/O for OpenAI to visit database
 def ask_database(conn, query):
     """Function to query SQLite database with a provided SQL query."""
     try:
@@ -47,7 +25,8 @@ def ask_database(conn, query):
         results = f"query failed with error: (e)"
     return results
 
-database_schema_dict = get_database_info(conn)
+
+database_schema_dict = calendar.get_database_info()
 database_schema_string = "\n".join(
     [
         f"Table: {table['table_name']}\nColumns:{', '.join(table['column_names'])}"
@@ -89,26 +68,9 @@ def registerCustomer(name, phone, date, time, service, specialistID, notes = 'No
 
 
 #We dont check specialist at this point, since we only have one specialist table
-def checkAvaliability(specialist, date, timeSlot):
-    # Connect to the SQLite database (or create it if it doesn't exist)
-    cursor = conn.cursor()
-
-    # Query to check if the given 'Date' column has an empty or NULL slot for the given 'time'
-    query = f'''
-    SELECT "{date}"
-    FROM Shop_Schedule
-    WHERE Time_Slots = ?
-    AND ("{date}" IS NULL OR "{date}" = '');
-    '''
-    cursor.execute(query,(timeSlot,))
-    # Fetch the result
-    result = cursor.fetchone()
-    if(result == 'unavaliable'):
-        print(f"The slot for '{timeSlot}' on {date} is not empty.")
-        return(True)
-    else:
-        print(f"The slot for '{timeSlot}' on {date} is empty.")
-        return(False)
+def check_calendar(date, time, specialist=None):
+    output = calendar.check_appointment_availability(date, time, specialist)
+    return output
     
 
 #func that will return the next solution
@@ -117,11 +79,18 @@ def make_reservation(user_name = None, phoneNumber = None, date = None, time = N
     print("user name: " + user_name, "phone number: " + phoneNumber, "date: " + date, "time: " + time, "service: " + service, "specialist: " + specialist)
     if((user_name == None) or (phoneNumber == None) or (date == None) or (service == None)):
         return ("Ask the user to provide all missing information.")
-    elif(checkAvaliability(specialist, date, time) == True):
-        #check the avaliability
-        return("Tell the user the reservation has been complete, ask if more help is needed.")
+    
+    returnCode = calendar.add_appointment(user_name, phoneNumber, date, time, service, specialist)
+    if(returnCode == 0):
+        return ("Tell the user the reservation has been complete, ask if more help is needed.")
+    elif(returnCode == 1):
+        return ("Service is not offered by the shop, ask for clarify.")
+    elif(returnCode == 2):
+        return ("Outside business hours, ask the user to choose another time, or tell the user what time is avaliable.")
+    elif(returnCode == 3):
+        return ("All specialists are booked, ask for another time or wait.")
     else:
-        return("This periode of time is unavaliable, ask the user to choose another time, or tell the user what time is avaliable.")
+        return ("Tell the user that an unexpected error occured, visit shop website to see more details.")
 
 def cancel_reservation(name, phoneNumber, time, date):
     """Function to cancel reservation for user, must verify phoneNumber in order to process"""
@@ -157,22 +126,38 @@ aiTools = [
     {
         "type": "function",
         "function": {
-            "name": "check_availability",
-            "description": "Use this function to check if shop calendar is available.",
+            "name": "check_calendar",
+            "description": "Use this function to check the shop calendar and availability.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {
+                    "date": {
                         "type": "string",
                         "description": f"""
-                                SQL query extracting info to answer the user's question.
-                                SQL should be written using this database schema:
-                                {database_schema_string}
-                                The query should be returned in plain text, not in JSON.
+                                User proposed date, use this for checking whether the shop is open.
+                                date should be written using this format:
+                                {"year-month-date"}
+                                The date should be returned in plain text, not in JSON.
+                                """,
+                    },
+                    "time": {
+                        "type": "string",
+                        "description": f"""
+                                User proposed time, use this for checking the time whether the reservation is available.
+                                time should be written using this format in 24 hours:
+                                {"10:30"}
+                                The time should be returned in plain text, not in JSON.
+                                """,
+                    },
+                    "specialist": {
+                        "type": "string",
+                        "description": f"""
+                                User preferred specialist, not a required input, only pass in when user is asking for.
+                                The specialist should be returned in plain text, not in JSON.
                                 """,
                     }
                 },
-                "required": ["query"],
+                "required": ["date, time, specialist=None"],
             },
         }
     },
@@ -308,6 +293,11 @@ def ResponseManager(response_message):
             # Messages with role 'tool' must be a response to a preceding message 
             # with 'tool_calls'.
             printMessage()
+        elif tool_function_name == 'check_calendar':
+            date = json.loads(tool_calls[0].function.arguments)['date']
+            time = json.loads(tool_calls[0].function.arguments)['time']
+            specialist = json.loads(tool_calls[0].function.arguments)['specialist']            
+            results = check_calendar(date, time, specialist)
         else:
             print(f"Error: function {tool_function_name} does not exist")
     else:

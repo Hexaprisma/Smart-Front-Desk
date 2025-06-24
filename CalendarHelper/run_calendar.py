@@ -4,6 +4,8 @@ from config import SERVICES, SPECIALISTS
 if __name__ =="__main__":
     calendar = CalendarManager()
 
+    calendar.check_menu()
+
     name = "Dolly"
     phone = "1234567890"
     date = "2025-06-23"
@@ -16,7 +18,7 @@ if __name__ =="__main__":
     phone = "1234567890"
     date = "2025-06-24"
     time = "11:30"
-    service = "Nail Polish"
+    service = "Delux Manicure"
     specialist = "Sophia"
     calendar.add_appointment(name, phone, date, time, service, specialist)
 
