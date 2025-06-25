@@ -13,7 +13,8 @@ If you find this work useful in your research, please cite us.
   - The Smart-Front-Desk can help customers with orientations and policy reviews.
 - **Appointment setup and cancellation**
   - The Smart-Front-Desk can arrange the appointment, ensuring a good schedule for both the shopkeeper and the customer. 
-
+- **Cutoff recovery**
+    - The customer can cut off AI's speech and speak to it.
 
 ## Setup Instructions
 The best way to set up on Windows is using Visual Studio Code
