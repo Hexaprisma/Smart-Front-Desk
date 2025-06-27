@@ -90,6 +90,10 @@ class CalendarManager:
             if weekday not in WEEKDAYS:
                 return False, f"Closed on {weekday}."
 
+            # in working day, skip time check if null
+            if(time_str == "Any"):
+                return True, ""
+            
             start = datetime.strptime(time_str, "%H:%M")
             end = start + timedelta(minutes=duration)
             open_time = datetime.strptime(OPEN_TIME, "%H:%M")
@@ -102,6 +106,9 @@ class CalendarManager:
             return False, "Invalid date or time format."
 
     def add_appointment(self, customer_name, phone, date, time, service, preferred_specialist=None):
+        if(preferred_specialist == "Any"):
+            preferred_specialist = None
+        
         if not self.is_valid_service(service):
             print("Invalid service.")
             return 1
@@ -143,6 +150,9 @@ class CalendarManager:
             print(msg)
             return 2
 
+        if(time == "Any"):
+            return f"service at {date} is available, ask the user for services they want and time they would like to reserve."
+        
         assigned = self.find_available_specialist(date, time, duration, preferred=preferred_specialist)
         if not assigned:
             print("No specialist available at that time.")
