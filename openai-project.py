@@ -35,22 +35,7 @@ database_schema_string = "\n".join(
     ]
 )
 
-def registerSchedule(time,date,specialistID):
-    cursor = conn.cursor()
-    cursor.execute('''
-    SELECT "{date}"
-    FROM Shop_Schedule
-    WHERE time_slot = ?
-    AND ("{date}" IS NULL OR "{date}" = '');
-    INSERT INTO Shop_Schedule (Time_Slots, "{date}")
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (name, phone, 'confirm', date, time, service, specialistID, notes))
 
-    # Commit the transaction to save the changes
-    conn.commit()
-
-    # Close the connection
-    conn.close()
 def registerCustomer(name, phone, date, time, service, specialistID, notes = 'None'):
     cursor = conn.cursor()
     # Insert data into the 'customerInfo' table
@@ -76,17 +61,17 @@ def check_calendar(date, time, specialist=None):
     
 
 #func that will return the next solution
-def make_reservation(user_name = None, phoneNumber = None, date = None, time = None, service = None, specialist = "Any"):
+def make_reservation(user_name, phoneNumber, date, time, service, specialist = None):
     """Function to make reservation for user by accessing SQLite database."""
     print("user name: " + user_name, "phone number: " + phoneNumber, "date: " + date, "time: " + time, "service: " + service, "specialist: " + specialist)
-    if((user_name == None) or (phoneNumber == None) or (date == None) or (service == None)):
+    if((user_name == None) | (phoneNumber == None) | (date == None) | (service == None)):
         return ("Ask the user to provide all missing information.")
     
     returnCode = calendar.add_appointment(user_name, phoneNumber, date, time, service, specialist)
     if(returnCode == 0):
         return ("Tell the user the reservation has been complete, ask if more help is needed.")
     elif(returnCode == 1):
-        return ("Service is not offered by the shop, ask for clarify.")
+        return ("Service is not offered by the shop, find the similar service from database and clarify with the user.")
     elif(returnCode == 2):
         return ("Outside business hours, ask the user to choose another time, or tell the user what time is avaliable.")
     elif(returnCode == 3):
@@ -168,33 +153,60 @@ aiTools = [
         "type": "function",
         "function": {
             "name": "make_reservation",
-            "description": "collect all necessary information from the user. If any of these is missing, ask the user to privode it.",
+            "description": """
+                        Use this function to make reservation for the customer, collect all necessary information from the user. 
+                        Do not guess customer's name, phone number, if they are missing, ask for clarify. 
+            """,
             "parameters": {
                 "type": "object",
                 "properties": {
                     "user_name": {
                         "type": "string",
-                        "description": "The first name user provided.",
+                        "description": f"""
+                                    The first name user provided.
+                                    name shou be written using this format:
+                                    {"name"}
+                        """,
                     },
                     "date": {
                         "type": "string",
-                        "description": "The weekday user want to reserve, from Monday to Sunday.",
+                        "description": f"""
+                                User proposed date, use this for checking whether the shop is open.
+                                date should be written using this format:
+                                {"year-month-date"}
+                                The date should be returned in plain text, not in JSON.
+                                """,
                     },
                     "time": {
                         "type": "string",
-                        "description": "The time period when the user wish to reserve.",
+                        "description": f"""
+                                User proposed time, use this for checking the time whether the reservation is available.
+                                time should be written using this format in 24 hours:
+                                {"10:30"}
+                                The time should be returned in plain text, not in JSON.
+                                """,
                     },
                     "service": {
                         "type": "string",
-                        "description": "The name of the service that the user wish to order, only options avaliable from ask_database."
+                        "description": f"""
+                                    The name of the service that the user wish to order, only options avaliable from ask_database.
+                                    The service should be returned in plain text, not in JSON.
+                        """
                     },
                     "phoneNumber": {
                         "type": "string",
-                        "description": "The phone number user provided."
+                        "description": f"""
+                                The phone number user provided.
+                                phone number should be 10 digit number:
+                                The phone number should be returned in plain text, not in JSON.
+                                """
                     },
-                    "specialist":{
+                    "specialist": {
                         "type": "string",
-                        "description": "The specific specialist user wish to have, this is optional."
+                        "description": f"""
+                                User preferred specialist, not a required input, only pass in when user is asking for.
+                                The specialist should be returned in plain text, not in JSON.
+                                """,
                     }
                 },
                 "required": ["user_name", "date", "time", "service","phoneNumber"]
@@ -204,17 +216,21 @@ aiTools = [
 
 ]
 
-#open ai events
+#open ai events, initailizing OpenAI prompt
 
 client = OpenAI()
 GPT_MODEL = "gpt-3.5-turbo"
 
 today = date.today()
+_query = "SELECT service_name, duration, price, discription FROM Services;"
+shop_menu = str(conn.execute(_query).fetchall())
+
 messages = [
     {"role":"system",
     "content": "Your name is Lynx and you are a shop assistant, skilled in customer services. You should get the customer's first and last name, phone number, and services they want."},
     {"role": "system", "content": "Your response should be as comscise as possible, don't use complex language."},
-    {"role": "system", "content": "today's date is: {today}"},
+    {"role": "system", "content": f"""today's date is: {today}"""},
+    {"role": "system", "content": f"""Shop service menu: {shop_menu}"""},
     {"role": "system", "content": "Don't make assumptions about what customers want. Ask for clarification if a user request is ambiguous."},
     {"role": "system", "content": "Don't make assumptions about what values to plug into functions. Ask for clarification if a user request is ambiguous."},
     {"role": "system","content":"only use database information to answer questions. Do not speak anything unrelated to database information."},
@@ -262,14 +278,16 @@ def ResponseManager(response_message):
         tool_function_name = tool_calls[0].function.name
         #we might need to set another condition to check if tool_calls valid for 
         if tool_function_name == 'make_reservation':
-            userName = json.loads(tool_calls[0].function.arguments)['user_name']
-            userPN = json.loads(tool_calls[0].function.arguments)['phoneNumber']
-            scheduleTime = json.loads(tool_calls[0].function.arguments)['time']
-            scheduleDate = json.loads(tool_calls[0].function.arguments)['date']
-            scheduleService = json.loads(tool_calls[0].function.arguments)['service']
-            scheduleSpecialist = json.loads(tool_calls[0].function.arguments).get('specialist', "Any")
+            #make reservation func
+            user_name = json.loads(tool_calls[0].function.arguments).get('user_name', None)
+            phoneNumber = json.loads(tool_calls[0].function.arguments).get('phoneNumber', None)
+            date = json.loads(tool_calls[0].function.arguments)['date']
+            time = json.loads(tool_calls[0].function.arguments)['time']
+            service = json.loads(tool_calls[0].function.arguments)['service']
+            specialist = json.loads(tool_calls[0].function.arguments).get('specialist', "Any")
             
-            results = make_reservation(userName, userPN, scheduleTime, scheduleDate, scheduleService, scheduleSpecialist)
+            print(f"making reservation \n")
+            results = make_reservation(user_name, phoneNumber, date, time, service, specialist)
             #print result
             
             messages.append({
@@ -283,6 +301,7 @@ def ResponseManager(response_message):
 
         elif tool_function_name == 'ask_database':
             tool_query_string = json.loads(tool_calls[0].function.arguments)['query']
+            print(f"checking database \n")
             results = ask_database(conn, tool_query_string)
 
             messages.append({
@@ -299,9 +318,10 @@ def ResponseManager(response_message):
             printMessage()
         elif tool_function_name == 'check_calendar':
             date = json.loads(tool_calls[0].function.arguments)['date']
-            time = json.loads(tool_calls[0].function.arguments)['time']
+            time = json.loads(tool_calls[0].function.arguments).get('time', "Any")
             specialist = json.loads(tool_calls[0].function.arguments).get('specialist', "Any")
-            #print(f"{date} {time} {specialist}")            
+            #print(f"{date} {time} {specialist}")
+            print(f"checking calendar \n")
             results = check_calendar(date, time, specialist)
             messages.append({
                 "role":"tool",
