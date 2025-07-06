@@ -16,6 +16,12 @@ If you find this work useful in your research, please cite us.
 - **Cutoff recovery**
     - The customer can cut off AI's speech and speak to it.
 
+## Guides
+**There are three branches available for the experiment**
+The main branch is the most straightforward one; this version requires no text-to-speech or speech-to-text module and uses the terminal to experiment with the major function. 
+
+Version 1.20 and 1.30 require the VOSK model
+
 ## Setup Instructions
 The best way to set up on Windows is using Visual Studio Code
 1. Install the Python library
