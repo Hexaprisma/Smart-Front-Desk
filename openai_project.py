@@ -7,8 +7,7 @@ from datetime import date
 
 
 
-#now replaced with the calendar manager method
-#conn = sqlite3.connect("data/shopData/TestingData.db")
+
 class OpenAIProject:
     """OpenAI Project class to handle OpenAI interactions and database queries."""
   
@@ -95,6 +94,75 @@ class OpenAIProject:
         {
             "type": "function",
             "function": {
+                "name": "change_reservation",
+                "description": "Use this function to change an existing reservation.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_name": {
+                            "type": "string",
+                            "description": """
+                                        The customer's full name
+                            """,
+                        },                        
+                        "date": {
+                            "type": "string",
+                            "description": f"""
+                                    User scheduled date, use this for validating the appointment.
+                                    date should be written using this format:
+                                    {"year-month-date"}
+                                    The date should be returned in plain text, not in JSON.
+                                    """,
+                        },
+                        "is_cancel": {
+                            "type": "boolean",
+                            "description": f"""
+                                    Whether the user wants to cancel the appointment.
+                                    """,
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": f"""
+                                    User scheduled time, use this for checking the time whether the reservation is valid.
+                                    time should be written using this format in 24 hours:
+                                    {"10:30"}
+                                    The time should be returned in plain text, not in JSON.
+                                    """,
+                        },
+                        "new_date": {
+                            "type": "string",
+                            "description": f"""
+                                    New date proposed by the user, use this for checking whether the shop is open.
+                                    date should be written using this format:
+                                    {"year-month-date"}
+                                    The date should be returned in plain text, not in JSON.
+                                    """,
+                        },
+                        "new_time": {
+                            "type": "string",
+                            "description": f"""
+                                    New time proposed by the user, use this for checking the time whether the reservation is available.
+                                    time should be written using this format in 24 hours:
+                                    {"HH:MM"}
+                                    The time should be returned in plain text, not in JSON.
+                                    """,
+                        },
+                        "new_service": {
+                            "type": "string",
+                            "description": f"""
+                                    New service proposed by the user, use this for checking whether the service is available.
+                                    The service should be returned in plain text, not in JSON.
+                                    """,
+                        },
+                    },
+                    "required": ["user_name", "date", "is_cancel"]
+                },
+            }
+        },
+
+        {
+            "type": "function",
+            "function": {
                 "name": "make_reservation",
                 "description": """
                             Use this function to make reservation for the customer, collect all necessary information from the user. 
@@ -158,13 +226,14 @@ class OpenAIProject:
         #open ai events, initailizing OpenAI prompt
 
         self.client = OpenAI()
-        self.GPT_MODEL = "gpt-3.5-turbo"
+        self.GPT_MODEL = "gpt-4.1-mini"
 
         today = date.today()
         formatted_date = today.strftime("%Y-%m-%d")
         weekday = today.strftime("%A")
         _query = "SELECT service_name, duration, price, discription FROM Services;"
         shop_menu = str(self.conn.execute(_query).fetchall())
+        shop_info = str(self.conn.execute("SELECT Shop_name, Opening_Hours, Location, Specialists, General_Background, Contact_Info, Website FROM Shop_Info;").fetchall())
         user_name = None
         phone_number = None
         print(f"Today is {formatted_date}, which is a {weekday}.")
@@ -172,8 +241,9 @@ class OpenAIProject:
             {"role":"system",
             "content": "Your name is Lynx and you are a shop assistant, skilled in customer services. You should get the customer's first and last name, phone number, and services they want."},
             {"role": "system", "content": "Your answer should be as short as possible, avoid long sentences."},
-            {"role": "system", "content": f"Today is {formatted_date}, which is a {weekday}."},
+            {"role": "system", "content": f"Today is {formatted_date}. Today is {weekday}."},
             {"role": "system", "content": f"Shop service menu: {shop_menu}"},
+            {"role": "system", "content": f"Shop information: {shop_info}"},
             {"role": "system", "content": "You are not allowed to call any function until the user has explicitly provided their full name and phone number. Always ask the user if the required information is missing."},
             {"role": "system","content":"only use database information to answer questions. Do not speak anything unrelated to database information."},
             {"role": "system", "content": "Start with a greeting, and ask the user how you can help them today."},
@@ -184,7 +254,7 @@ class OpenAIProject:
         # turn this while loop into a function to start the conversation
     def start_conversation(self, user_input=None):
         """Start the conversation with the user."""
-        print(f"{openAI_log} Starting conversation with OpenAI...")
+        #print(f"{openAI_log} Starting conversation with OpenAI...")
         # If user_input is provided, append it to messages
         if user_input:
             self.messages.append({"role": "user", "content": user_input})
@@ -197,8 +267,6 @@ class OpenAIProject:
             #check if tool is used:
             return self.ResponseManager(response_message)
             
-
-
 
 
 
@@ -216,22 +284,11 @@ class OpenAIProject:
 
 
 
-    def registerCustomer(self, name, phone, date, time, service, specialistID, notes = 'None'):
-        cursor = self.conn.cursor()
-        # Insert data into the 'customerInfo' table
-        cursor.execute('''
-        INSERT INTO customerInfo (Name, PhoneNumber, State, ReservedDate,ReservedTime, Services, PerferedSpecialistID, Notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (name, phone, 'confirm', date, time, service, specialistID, notes))
-
-        # Commit the transaction to save the changes
-        self.conn.commit()
-
-        # Close the connection
-        self.conn.close()
-
-        print("Your reservation has been complete.")
-
+    def check_registration(self, name):
+        output = self.calendar.get_appointments_by_customer(name)
+        if not output:
+            return "No registration found."
+        return f"Customer {name} has Registration found: {output}"
 
     #We dont check specialist at this point, since we only have one specialist table
     def check_calendar(self, date, time, specialist=None):
@@ -260,18 +317,27 @@ class OpenAIProject:
             return ("Tell the user that an unexpected error occured, visit shop website to see more details.")
 
     #disabled feature
-    def cancel_reservation(self, name, phoneNumber, time, date):
-        """Function to cancel reservation for user by accessing SQLite database."""
-        print("user name: " + name, "phone number: " + phoneNumber, "date: " + date, "time: " + time)
-        if((name == None) | (phoneNumber == None) | (date == None)):
-            return ("Ask the user to provide all missing information.")
-        
-        #call calendar manager cancel appointment method
-        returnCode = self.calendar.cancel_appointment(name, phoneNumber, date, time)
+    def change_reservation(self, name, date, is_cancel=False, time=None, new_date=None, new_time=None, new_service=None):
+        """Function to change reservation for user by accessing SQLite database."""
+        print("user name: " + name, "date: " + date, "time: " + time)
+        if(name == None):
+            return ("Ask the user to provide full name.")
+        if (time == None | date == None):
+            return ("Run the check_registration function to get the user's appointment information, then ask the user which appointment they want to change.")
+        if (new_date == None | new_time == None | new_service == None):
+            return ("Ask the user to provide all missing information for the new appointment.")
+        #call calendar manager change appointment method
+        returnCode = self.calendar.change_appointment(name, date, time, new_date, new_time, new_service, is_cancel)
         if(returnCode == 0):
-            return ("Tell the user the reservation has been canceled.")
+            return ("Tell the user the reservation has been successfully changed.")
         elif(returnCode == 1):
             return ("No reservation found for this user, ask for more details.")
+        elif(returnCode == 2):
+            return ("Service is not offered by the shop, find the similar service from database and clarify with the user.")
+        elif(returnCode == 3):
+            return ("Outside business hours, ask the user to choose another time, or tell the user what time is avaliable.")
+        elif(returnCode == 4):
+            return ("All specialists are booked, ask for another time or wait.")
         else:
             return ("Tell the user that an unexpected error occured, visit shop website to see more details.")
 

@@ -169,10 +169,107 @@ class CalendarManager:
         for row in rows:
             print(f"[{row[0]}] {row[1]} - {row[2]} at {row[3]} with {row[6]} ({row[4]})")
 
-    def cancel_appointment(self, appointment_id):
-        self.conn.execute("DELETE FROM Appointments WHERE id = ?", (appointment_id,))
+    def get_appointment(self, customer_name, date, time):
+        """Return appointment details or None if not found."""
+        row = self.conn.execute("""
+            SELECT * FROM Appointments
+            WHERE customer_name = ? AND date = ? AND time = ?
+        """, (customer_name, date, time)).fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "customer_name": row[1],
+                "date": row[2],
+                "time": row[3],
+                "service": row[4],
+                "phone": row[5],
+                "specialist": row[6],
+                "price": row[7]
+            }
+        return None
+    
+    def get_appointments_by_customer(self, customer_name):
+        """Return a list of appointments for a specific customer."""
+        rows = self.conn.execute("""
+            SELECT * FROM Appointments
+            WHERE customer_name = ?
+            ORDER BY date, time
+        """, (customer_name,)).fetchall()
+        appointments = []
+        for row in rows:
+            appointments.append({
+                "id": row[0],
+                "customer_name": row[1],
+                "date": row[2],
+                "time": row[3],
+                "service": row[4],
+                "phone": row[5],
+                "specialist": row[6],
+                "price": row[7]
+            })
+        return appointments
+    
+    def change_appointment(self, customer_name, date, time=None, new_date=None, new_time=None, new_service=None, is_cancel=False):
+        """Change an existing appointment."""
+        appointment = self.get_appointment(customer_name, date, time)
+        if not appointment:
+            print("No appointment found.")
+            return 1
+
+        if is_cancel:
+            self.cancel_appointment(customer_name, date, time)
+            return 0
+
+        if new_service and not self.is_valid_service(new_service):
+            print("Invalid service.")
+            return 2
+
+        if new_date is None:
+            new_date = date
+        if new_time is None:
+            new_time = time
+        if new_service is None:
+            new_service = appointment["service"]
+
+        duration = SERVICES[new_service]["duration"]
+        valid, msg = self.check_business_hours(new_date, new_time, duration)
+        if not valid:
+            print(msg)
+            return 3
+
+        assigned = self.find_available_specialist(new_date, new_time, duration, preferred=appointment["specialist"])
+        if not assigned:
+            print("No specialist available at that time.")
+            return 4
+
+        """ Remove the old appointment, if time or date are changed a new appointment will be created """
+        #self.cancel_appointment(customer_name, date, time)
+        
+        self.conn.execute("""
+            UPDATE Appointments
+            SET date = ?, time = ?, service = ?, specialist = ?
+            WHERE id = ?
+        """, (new_date, new_time, new_service, assigned, appointment["id"]))
         self.conn.commit()
-        print(f"Appointment ID {appointment_id} canceled.")
+        print(f"Appointment changed to {new_date} at {new_time} with {assigned} for {new_service}.")
+        return 0
+    
+
+    def cancel_appointment(self, customer_name, date, time):
+        """Cancel an existing appointment."""
+        appointment = self.get_appointment(customer_name, date, time)
+        if not appointment:
+            print("No appointment found.")
+            return 1
+
+        self.conn.execute("""
+            DELETE FROM Appointments
+            WHERE id = ?
+        """, (appointment["id"],))
+        self.conn.commit()
+        print(f"Appointment on {date} at {time} for {customer_name} has been canceled.")
+        return 0
+    
 
     def check_menu(self):
         print(f"We offer:\n")
