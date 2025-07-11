@@ -169,12 +169,12 @@ class CalendarManager:
         for row in rows:
             print(f"[{row[0]}] {row[1]} - {row[2]} at {row[3]} with {row[6]} ({row[4]})")
 
-    def get_appointment(self, customer_name, date, time):
+    def get_appointment(self, phone_number, date, time):
         """Return appointment details or None if not found."""
         row = self.conn.execute("""
             SELECT * FROM Appointments
-            WHERE customer_name = ? AND date = ? AND time = ?
-        """, (customer_name, date, time)).fetchone()
+            WHERE phone = ? AND date = ? AND time = ?
+        """, (phone_number, date, time)).fetchone()
         if row:
             return {
                 "id": row[0],
@@ -188,13 +188,13 @@ class CalendarManager:
             }
         return None
     
-    def get_appointments_by_customer(self, customer_name):
+    def get_appointments_by_customer(self, phone_number):
         """Return a list of appointments for a specific customer."""
         rows = self.conn.execute("""
             SELECT * FROM Appointments
-            WHERE customer_name = ?
+            WHERE phone = ?
             ORDER BY date, time
-        """, (customer_name,)).fetchall()
+        """, (phone_number,)).fetchall()
         appointments = []
         for row in rows:
             appointments.append({
@@ -209,17 +209,13 @@ class CalendarManager:
             })
         return appointments
     
-    def change_appointment(self, customer_name, date, time=None, new_date=None, new_time=None, new_service=None, is_cancel=False):
+    def change_appointment(self, phone_number, date, time, new_date, new_time, new_service):
         """Change an existing appointment."""
-        appointment = self.get_appointment(customer_name, date, time)
+        appointment = self.get_appointment(phone_number, date, time)
         if not appointment:
             print("No appointment found.")
             return 1
-
-        if is_cancel:
-            self.cancel_appointment(customer_name, date, time)
-            return 0
-
+        
         if new_service and not self.is_valid_service(new_service):
             print("Invalid service.")
             return 2
@@ -243,8 +239,8 @@ class CalendarManager:
             return 4
 
         """ Remove the old appointment, if time or date are changed a new appointment will be created """
-        #self.cancel_appointment(customer_name, date, time)
-        
+        #self.cancel_appointment(phone_number, date, time)
+        print(f"Changing appointment for {phone_number} from {date} at {time} to {new_date} at {new_time} with {assigned} for {new_service}.")
         self.conn.execute("""
             UPDATE Appointments
             SET date = ?, time = ?, service = ?, specialist = ?
@@ -255,9 +251,9 @@ class CalendarManager:
         return 0
     
 
-    def cancel_appointment(self, customer_name, date, time):
+    def cancel_appointment(self, phone_number, date, time):
         """Cancel an existing appointment."""
-        appointment = self.get_appointment(customer_name, date, time)
+        appointment = self.get_appointment(phone_number, date, time)
         if not appointment:
             print("No appointment found.")
             return 1
@@ -267,7 +263,7 @@ class CalendarManager:
             WHERE id = ?
         """, (appointment["id"],))
         self.conn.commit()
-        print(f"Appointment on {date} at {time} for {customer_name} has been canceled.")
+        print(f"Appointment on {date} at {time} for {phone_number} has been canceled.")
         return 0
     
 

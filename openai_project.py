@@ -95,14 +95,18 @@ class OpenAIProject:
             "type": "function",
             "function": {
                 "name": "change_reservation",
-                "description": "Use this function to change an existing reservation.",
+                "description": "Use this function to change an existing appointment for the customer.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "user_name": {
+                        "phone_number": {
                             "type": "string",
-                            "description": """
-                                        The customer's full name
+                            "description": f"""
+                                        The customer's phone number
+                                        phone number should be 10 digit number
+                                        phone number should be written using this format:
+                                        {"1234567890"}
+                                        The phone number should be returned in plain text, not in JSON.
                             """,
                         },                        
                         "date": {
@@ -123,7 +127,7 @@ class OpenAIProject:
                         "time": {
                             "type": "string",
                             "description": f"""
-                                    User scheduled time, use this for checking the time whether the reservation is valid.
+                                    User scheduled time, use this for checking the time whether the reservation is valid, not a required input, only pass in when user provide it.
                                     time should be written using this format in 24 hours:
                                     {"10:30"}
                                     The time should be returned in plain text, not in JSON.
@@ -155,7 +159,48 @@ class OpenAIProject:
                                     """,
                         },
                     },
-                    "required": ["user_name", "date", "is_cancel"]
+                    "required": ["phone_number", "date", "is_cancel"]
+                },
+            }
+        },
+                {
+            "type": "function",
+            "function": {
+                "name": "cancel_appointment",
+                "description": "Use this function to cancel an existing appointment for the customer.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "phone_number": {
+                            "type": "string",
+                            "description": f"""
+                                        The customer's phone number
+                                        phone number should be 10 digit number
+                                        phone number should be written using this format:
+                                        {"1234567890"}
+                                        The phone number should be returned in plain text, not in JSON.
+                            """,
+                        },                        
+                        "date": {
+                            "type": "string",
+                            "description": f"""
+                                    User scheduled date, use this for validating the appointment.
+                                    date should be written using this format:
+                                    {"year-month-date"}
+                                    The date should be returned in plain text, not in JSON.
+                                    """,
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": f"""
+                                    User scheduled time, use this for checking the time whether the reservation is valid, not a required input, only pass in when user provide it.
+                                    time should be written using this format in 24 hours:
+                                    {"10:30"}
+                                    The time should be returned in plain text, not in JSON.
+                                    """,
+                        },
+                    },
+                    "required": ["phone_number", "date"]
                 },
             }
         },
@@ -174,7 +219,7 @@ class OpenAIProject:
                         "user_name": {
                             "type": "string",
                             "description": """
-                                        The customer's full name
+                                        The customer's name
                             """,
                         },
                         "date": {
@@ -206,7 +251,9 @@ class OpenAIProject:
                             "type": "string",
                             "description": f"""
                                     Customer's contact number
-                                    phone number should be 10 digit number:
+                                    phone number should be 10 digit number
+                                    phone number should be written using this format:
+                                    {"1234567890"}
                                     The phone number should be returned in plain text, not in JSON.
                                     """
                         },
@@ -284,11 +331,11 @@ class OpenAIProject:
 
 
 
-    def check_registration(self, name):
-        output = self.calendar.get_appointments_by_customer(name)
+    def check_registration(self, phone_number):
+        output = self.calendar.get_appointments_by_customer(phone_number)
         if not output:
             return "No registration found."
-        return f"Customer {name} has Registration found: {output}"
+        return f"Customer with phone number {phone_number} has Registration found: {output}"
 
     #We dont check specialist at this point, since we only have one specialist table
     def check_calendar(self, date, time, specialist=None):
@@ -316,18 +363,21 @@ class OpenAIProject:
         else:
             return ("Tell the user that an unexpected error occured, visit shop website to see more details.")
 
-    #disabled feature
-    def change_reservation(self, name, date, is_cancel=False, time=None, new_date=None, new_time=None, new_service=None):
+
+    def change_reservation(self, phone_number, date, time=None, new_date=None, new_time=None, new_service=None):
         """Function to change reservation for user by accessing SQLite database."""
-        print("user name: " + name, "date: " + date, "time: " + time)
-        if(name == None):
-            return ("Ask the user to provide full name.")
-        if (time == None | date == None):
+        print("phone number: " + phone_number, "date: " + date, "time: " + time, "new date: " + str(new_date), "new time: " + str(new_time), "new service: " + str(new_service))
+        if(phone_number == None):
+            return ("Ask the user to provide phone number.")
+        if (time == None):
             return ("Run the check_registration function to get the user's appointment information, then ask the user which appointment they want to change.")
-        if (new_date == None | new_time == None | new_service == None):
-            return ("Ask the user to provide all missing information for the new appointment.")
+        if (new_service == None and new_date == None and new_time == None):
+            return ("Ask the user to provide meaningful change, new date, new time or new service.")
+        if (new_date == None and new_time == None):
+            return ("Ask the user to provide a new date or time.")
+
         #call calendar manager change appointment method
-        returnCode = self.calendar.change_appointment(name, date, time, new_date, new_time, new_service, is_cancel)
+        returnCode = self.calendar.change_appointment(phone_number, date, time, new_date, new_time, new_service)
         if(returnCode == 0):
             return ("Tell the user the reservation has been successfully changed.")
         elif(returnCode == 1):
@@ -341,7 +391,23 @@ class OpenAIProject:
         else:
             return ("Tell the user that an unexpected error occured, visit shop website to see more details.")
 
-
+    def cancel_appointment(self, phone_number, date, time=None):
+        """Function to cancel appointment for user by accessing SQLite database."""
+        print("phone number: " + phone_number, "date: " + date, "time: " + time)
+        if(phone_number == None):
+            return ("Ask the user to provide phone number.")
+        if (date == None):
+            return ("Ask the user to provide date.")
+        if (time == None):
+            print("Checking registration for user to get appointment information.")
+            return ("Run the check_registration function to get the user's appointment information, then ask the user which appointment they want to cancel.")
+        results = self.calendar.cancel_appointment(phone_number, date, time)
+        if(results == 0):
+            return ("Tell the user the reservation has been successfully canceled.")
+        elif(results == 1):
+            return ("No reservation found for this user, ask for more details.")
+        else:
+            return ("Tell the user that an unexpected error occured, visit shop website to see more details.")
 
     #This Print message is for call without tools
     def printMessage(self):
@@ -442,6 +508,43 @@ class OpenAIProject:
                 #print(f"{date} {time} {specialist}")
                 print(f"{openAI_log} checking calendar \n")
                 results = self.check_calendar(date, time, specialist)
+                self.messages.append({
+                    "role":"tool",
+                    "tool_call_id":tool_call_id,
+                    "name": tool_function_name,
+                    "content": results
+                })
+                return self.printMessage()
+            elif tool_function_name == 'change_reservation':
+                phone_number = args.get('phone_number', None)
+                date = args.get('date', None)
+                time = args.get('time', None)
+                new_date = args.get('new_date', None)
+                new_time = args.get('new_time', None)
+                new_service = args.get('new_service', None)
+                results = self.change_reservation(phone_number, date, time, new_date, new_time, new_service)
+                self.messages.append({
+                    "role":"tool",
+                    "tool_call_id":tool_call_id,
+                    "name": tool_function_name,
+                    "content": results
+                })
+                return self.printMessage()
+            elif tool_function_name == 'cancel_appointment':
+                phone_number = args.get('phone_number', None)
+                date = args.get('date', None)
+                time = args.get('time', None)
+                results = self.cancel_appointment(phone_number, date, time)
+                self.messages.append({
+                    "role":"tool",
+                    "tool_call_id":tool_call_id,
+                    "name": tool_function_name,
+                    "content": results
+                })
+                return self.printMessage()
+            elif tool_function_name == 'check_registration':
+                phone_number = args.get('phone_number', None)
+                results = self.check_registration(phone_number)
                 self.messages.append({
                     "role":"tool",
                     "tool_call_id":tool_call_id,
